@@ -1103,6 +1103,9 @@ and Maimai event to grind :3`
       envelopeOpening: false,
       messageAnimating: false,
       messageIndex: 0,
+      musicContext: null,
+      musicBuffer: null,
+      musicSource: null,
       envelopeTimer: null,
       messageTimers: [],
       transitionTimers: []
@@ -1406,13 +1409,51 @@ and Maimai event to grind :3`
 
     document.addEventListener("pointerdown", startMusic, { once: true });
 
-    function startMusic() {
+    async function startMusic() {
       if (state.audioStarted) return;
 
       state.audioStarted = true;
       document.body.classList.add("started");
 
+      try {
+        const AudioContext = window.AudioContext || window.webkitAudioContext;
+        if (!AudioContext) {
+          playFallbackMusic();
+          return;
+        }
+
+        state.musicContext = state.musicContext || new AudioContext();
+        if (state.musicContext.state === "suspended") {
+          await state.musicContext.resume();
+        }
+
+        if (!state.musicBuffer) {
+          const response = await fetch("assets/bgm.mp3");
+          const arrayBuffer = await response.arrayBuffer();
+          state.musicBuffer = await state.musicContext.decodeAudioData(arrayBuffer);
+        }
+
+        const gain = state.musicContext.createGain();
+        const source = state.musicContext.createBufferSource();
+
+        gain.gain.value = 0.38;
+        source.buffer = state.musicBuffer;
+        source.loop = true;
+        source.connect(gain);
+        gain.connect(state.musicContext.destination);
+        source.start(0);
+
+        state.musicSource = source;
+      } catch {
+        state.audioStarted = false;
+        playFallbackMusic();
+      }
+    }
+
+    function playFallbackMusic() {
       const bgm = $("#bgm");
+      state.audioStarted = true;
+      document.body.classList.add("started");
       bgm.volume = 0.38;
       bgm.play().catch(() => {
         state.audioStarted = false;
